@@ -177,7 +177,7 @@ input:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122,69,.15)}
 /* ── MAP CALIBRATION ─────────────────────────────────────────
    Positions were traced from the campus screenshot (x,y in pixels).
    Adjust CENTER / MPP if markers sit slightly off the buildings. */
-const CENTER=[17.6128,121.7268];     // lat,lng of the screenshot's middle (480,309)
+const CENTER=[17.617650,121.723719]; // 17°37'03.54"N 121°43'25.39"E = screenshot's middle (480,309)
 const MPP=0.35;                      // metres per screenshot pixel
 const M_LAT=111320, M_LNG=106140;    // metres per degree at this latitude
 const p2ll=(x,y)=>[CENTER[0]-(y-309)*MPP/M_LAT, CENTER[1]+(x-480)*MPP/M_LNG];
