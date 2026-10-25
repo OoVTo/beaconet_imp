@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BEACONET · St. Paul University Philippines</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--g:#14532d;--g2:#1f7a45;--gl:#e8f3ec;--gold:#c9a227;--gold2:#f6edc8;--bg:#fbfaf5;--card:#fff;--line:#e3dfca;--tx:#1b2a20;--mu:#6d7c71;--red:#b3261e;--warn:#9a6b00;
+--serif:'Libre Baskerville',Georgia,serif;--sans:'Source Sans 3','Segoe UI',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:var(--sans)}
+.hidden{display:none!important}
+button{font-family:var(--sans);cursor:pointer}
+/* login */
+#login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,var(--g) 0 46%,var(--bg) 46%)}
+.lbox{background:#fff;width:400px;max-width:92vw;padding:2.2rem 2rem;border-top:5px solid var(--gold);box-shadow:0 12px 40px rgba(20,83,45,.25)}
+.lbox h1{font-family:var(--serif);color:var(--g);font-size:1.7rem;letter-spacing:.04em}
+.lbox p.sub{color:var(--mu);font-size:.9rem;margin:.3rem 0 1.5rem;line-height:1.4}
+label{display:block;font-size:.8rem;font-weight:600;color:var(--g);margin:0 0 .3rem}
+input{width:100%;padding:.65rem .75rem;border:1px solid var(--line);font:inherit;background:#fff;margin-bottom:1rem;outline:none}
+input:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122,69,.15)}
+.btn{background:var(--g);color:#fff;border:0;padding:.7rem 1.1rem;font-weight:600;font-size:.9rem;border-bottom:3px solid var(--gold)}
+.btn:hover:not(:disabled){background:var(--g2)}.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--g);border:1px solid var(--g)}
+.err{color:var(--red);font-size:.82rem;margin-bottom:.8rem;display:none}
+/* app */
+#app{position:fixed;inset:0;display:flex}
+.side{width:236px;background:var(--g);color:#fff;display:flex;flex-direction:column;flex-shrink:0}
+.logo{padding:1.4rem 1.3rem 1.1rem;border-bottom:2px solid var(--gold);font-family:var(--serif);font-weight:700;font-size:1.15rem;letter-spacing:.05em}
+.logo small{display:block;font-family:var(--sans);font-weight:400;font-size:.72rem;color:var(--gold2);letter-spacing:.02em;margin-top:.3rem}
+.nav{flex:1;padding:.8rem 0}
+.ni{padding:.75rem 1.3rem;font-size:.92rem;cursor:pointer;color:rgba(255,255,255,.75);border-left:4px solid transparent}
+.ni:hover{background:rgba(255,255,255,.08);color:#fff}
+.ni.on{background:rgba(255,255,255,.13);color:#fff;border-left-color:var(--gold)}
+.ng{padding:.9rem 1.3rem .3rem;font-size:.75rem;color:var(--gold2);opacity:.8}
+.prof{padding:1rem 1.3rem;border-top:1px solid rgba(255,255,255,.15);font-size:.85rem}
+.prof button{margin-top:.5rem;background:transparent;border:1px solid var(--gold);color:var(--gold2);padding:.3rem .7rem;font-size:.75rem}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.4rem;background:#fff;border-bottom:3px solid var(--gold);gap:1rem}
+.top h2{font-family:var(--serif);font-size:1.05rem;color:var(--g)}
+.tr{display:flex;gap:.6rem;align-items:center}
+.badge{font-size:.78rem;padding:.25rem .65rem;background:var(--gl);color:var(--g);border:1px solid #b9d6c3;font-weight:600}
+.body{flex:1;position:relative;overflow:hidden;display:flex}
+.view{flex:1;overflow-y:auto;padding:1.3rem 1.5rem}
+#v-map{padding:0;position:relative;overflow:hidden}
+#map{position:absolute;inset:0;background:#dfe8dc}
+/* map overlays */
+.pin{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer}
+.pin .dot{width:14px;height:14px;border-radius:50%;background:var(--gold);border:2px solid #fff;box-shadow:0 0 0 2px var(--g)}
+.pin .lbl{background:rgba(255,255,255,.94);color:var(--g);font-size:.75rem;font-weight:600;padding:2px 7px;border-left:3px solid var(--gold);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.pin:hover .lbl,.pin.sel .lbl{background:var(--g);color:#fff}
+.pin.det .dot{background:var(--red);animation:pl 1.6s infinite}
+@keyframes pl{0%{box-shadow:0 0 0 2px var(--g),0 0 0 0 rgba(179,38,30,.6)}100%{box-shadow:0 0 0 2px var(--g),0 0 0 16px rgba(179,38,30,0)}}
+.item{position:absolute;transform:translate(-50%,-50%);text-align:center}
+.item i{display:block;width:18px;height:18px;border-radius:50%;background:var(--red);border:3px solid #fff;margin:0 auto;animation:pl 1.6s infinite}
+.item b{display:block;margin-top:3px;background:var(--red);color:#fff;font-size:.68rem;padding:1px 6px;white-space:nowrap}
+.info{position:absolute;left:14px;bottom:26px;z-index:500;width:290px;background:#fff;border-top:4px solid var(--gold);box-shadow:0 4px 18px rgba(0,0,0,.3);padding:.9rem 1rem}
+.info h3{font-family:var(--serif);color:var(--g);font-size:.98rem}
+.info .cnt{font-size:1.6rem;font-weight:600;color:var(--g);margin:.3rem 0 .1rem}
+.info .m{font-size:.8rem;color:var(--mu)}
+.info .x{float:right;border:0;background:none;font-size:1rem;color:var(--mu)}
+.bl{margin-top:.5rem;max-height:120px;overflow-y:auto;font-size:.8rem}
+.bl div{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line)}
+.legend{position:absolute;right:14px;bottom:26px;z-index:500;background:#fff;padding:.5rem .8rem;font-size:.76rem;box-shadow:0 2px 10px rgba(0,0,0,.25);border-left:4px solid var(--gold)}
+.legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 5px 0 0}
+.legend div{margin:2px 0}
+.hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;background:var(--g);color:#fff;font-size:.8rem;padding:.35rem .9rem;border-bottom:2px solid var(--gold)}
+/* right panel */
+.rs{width:0;overflow:hidden;background:#fff;border-left:1px solid var(--line);transition:width .25s;flex-shrink:0}
+.rs.open{width:270px}
+.rsi{width:270px;padding:1rem}
+.rsi h3{font-family:var(--serif);font-size:.95rem;color:var(--g);border-bottom:2px solid var(--gold);padding-bottom:.5rem;margin-bottom:.8rem;display:flex;justify-content:space-between}
+.bi{border:1px solid var(--line);padding:.7rem;margin-bottom:.5rem;display:flex;justify-content:space-between;gap:.5rem;font-size:.85rem}
+.bi.on{background:var(--gl);border-color:#b9d6c3}.bi.ing{background:var(--gold2)}.bi.bad{background:#fdecea}
+.bi small{display:block;color:var(--mu);font-size:.74rem;margin-top:3px}
+.bi button{border:1px solid var(--g);background:#fff;color:var(--g);padding:.2rem .6rem;font-size:.75rem;align-self:flex-start}
+.sp{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--g);border-radius:50%;animation:rot .9s linear infinite;margin:1.5rem auto .6rem}
+@keyframes rot{to{transform:rotate(360deg)}}
+.c{text-align:center;color:var(--mu);font-size:.85rem;padding:1rem 0}
+/* lists */
+.ent{background:#fff;border:1px solid var(--line);border-left:4px solid var(--gold);padding:.7rem .9rem;margin-bottom:.5rem;font-size:.85rem;display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start}
+.ent b{color:var(--g)}.ent small{display:block;color:var(--mu);margin-top:2px}
+.tag{display:inline-block;font-size:.74rem;padding:1px 8px;margin-top:4px;font-weight:600}
+.tag.found{background:var(--gl);color:var(--g)}.tag.nf{background:#fdecea;color:var(--red)}.tag.deny{background:var(--gold2);color:var(--warn)}
+.sm{border:1px solid var(--g);background:#fff;color:var(--g);padding:.25rem .7rem;font-size:.75rem;margin:.4rem .3rem 0 0}
+.sm.done{background:var(--gl);cursor:default}
+.x2{border:0;background:none;color:var(--red);font-size:.95rem;opacity:.6}
+.frm{max-width:420px;margin-top:1rem}
+/* overlays */
+.ov{position:fixed;inset:0;z-index:2000;background:rgba(20,83,45,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;opacity:0;pointer-events:none;transition:opacity .3s}
+.ov.show{opacity:1;pointer-events:all}
+.ov h3{font-family:var(--serif);margin-top:1.2rem;color:var(--gold2)}
+.ov .t{font-size:2.6rem;font-family:var(--serif)}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <form class="lbox" onsubmit="return doLogin(event)">
+    <h1>BEACONET</h1>
+    <p class="sub">Proximity Grid for Lost Item Tracking<br>St. Paul University Philippines · Admin sign-in</p>
+    <label for="u">Username</label><input id="u" autocomplete="off"/>
+    <label for="p">Password</label><input id="p" type="password"/>
+    <div class="err" id="lerr">Incorrect username or password. Try again.</div>
+    <button class="btn" style="width:100%">Sign in</button>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <div class="side">
+    <div class="logo">BEACONET<small>St. Paul University Philippines</small></div>
+    <div class="nav">
+      <div class="ng">Monitoring</div>
+      <div class="ni on" data-p="map" onclick="setPanel('map',this)">Campus Map</div>
+      <div class="ni" data-p="logs" onclick="setPanel('logs',this)">Detection Logs</div>
+      <div class="ni" data-p="status" onclick="setPanel('status',this)">Item Status</div>
+      <div class="ng">Management</div>
+      <div class="ni" data-p="reg" onclick="setPanel('reg',this)">Registration</div>
+      <div class="ni" data-p="cil" onclick="setPanel('cil',this)">Common Lost Items</div>
+    </div>
+    <div class="prof">Signed in as <b>spupbeuadmin</b><br><button onclick="logout()">Sign out</button></div>
+  </div>
+  <div class="main">
+    <div class="top">
+      <h2 id="ptitle">Campus Proximity Grid</h2>
+      <div class="tr">
+        <span class="badge">Online</span>
+        <button class="btn ghost" onclick="toggleRS()">Beacons</button>
+        <button class="btn" id="dbtn" onclick="startDetect()" disabled title="Connect all beacons first">Detect</button>
+      </div>
+    </div>
+    <div class="body">
+      <div class="view" id="v-map">
+        <div id="map"></div>
+        <div class="hint">Select an area to see its beacons</div>
+        <div class="info hidden" id="info"></div>
+        <div class="legend">
+          <div><span style="background:#c9a227"></span>Area</div>
+          <div><span style="background:#8a9e90"></span>Beacon offline</div>
+          <div><span style="background:#1f7a45"></span>Beacon online</div>
+          <div><span style="background:#b3261e"></span>Detected item</div>
+        </div>
+      </div>
+      <div class="view hidden" id="v-logs"></div>
+      <div class="view hidden" id="v-status"></div>
+      <div class="view hidden" id="v-reg">
+        <div id="reg-list"></div>
+        <div class="frm"><label>Add student ID</label><input id="reg-in" placeholder="e.g. G2024-01234" maxlength="32"/><div class="err" id="reg-err"></div><button class="btn" onclick="addReg()">Register</button></div>
+      </div>
+      <div class="view hidden" id="v-cil">
+        <div id="cil-list"></div>
+        <div class="frm"><label>Student ID</label><input id="cil-id" maxlength="32"/><label>Item description</label><input id="cil-item" placeholder="e.g. Water bottle, ID card" maxlength="64"/><div class="err" id="cil-err">Fill in both fields.</div><button class="btn" onclick="addCIL()">Add item</button></div>
+      </div>
+      <div class="rs" id="rs"><div class="rsi" id="rsi"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="ov" id="scan">
+  <canvas id="rc" width="300" height="300"></canvas>
+  <h3>Scanning grid</h3><div class="t" id="timer">20</div>
+</div>
+<div class="ov" id="idm">
+  <div class="lbox" style="color:var(--tx)">
+    <h1 style="font-size:1.2rem">Identity verification</h1>
+    <p class="sub">Enter your student ID to start the proximity scan.</p>
+    <label for="sid">Student ID</label><input id="sid" autocomplete="off" placeholder="e.g. G2024-00123"/>
+    <div class="err" id="sid-err">Student ID not registered. Access denied.</div>
+    <div style="display:flex;gap:.6rem"><button class="btn ghost" style="flex:1" type="button" onclick="cancelDetect()">Cancel</button><button class="btn" style="flex:1" type="button" onclick="confirmId()">Proceed</button></div>
+  </div>
+</div>
+
+<script>
+/* ── MAP CALIBRATION ─────────────────────────────────────────
+   Positions were traced from the campus screenshot (x,y in pixels).
+   Adjust CENTER / MPP if markers sit slightly off the buildings. */
+const CENTER=[17.6128,121.7268];     // lat,lng of the screenshot's middle (480,309)
+const MPP=0.35;                      // metres per screenshot pixel
+const M_LAT=111320, M_LNG=106140;    // metres per degree at this latitude
+const p2ll=(x,y)=>[CENTER[0]-(y-309)*MPP/M_LAT, CENTER[1]+(x-480)*MPP/M_LNG];
+const off=(ll,mE,mN)=>[ll[0]+mN/M_LAT, ll[1]+mE/M_LNG];
+const AREAS=[
+ {id:'A01',name:'SPUP Grandstand',x:175,y:110,n:6},
+ {id:'A02',name:'Grade School Building',x:470,y:235,n:6},
+ {id:'A03',name:'Mere Maria Building',x:150,y:305,n:5},
+ {id:'A04',name:'Learning Resource Center',x:160,y:410,n:6},
+ {id:'A05',name:'High School Building',x:720,y:330,n:5},
+ {id:'A06',name:'Global Center',x:885,y:320,n:5},
+ {id:'HYFLEX',name:'HYFLEX Room (SJ 1st Floor)',x:600,y:450,n:2}
+];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=id=>document.getElementById(id);
+
+/* ── STATE ── */
+let map,beaconLayer,itemMarker,selected=null,pins={};
+let hyRes=null,scanDone=false,curSid='',raf=null,cdInt=null;
+let regIDs=['g2010-0100065','g2018-02453'],logs=[],stats=[],cil=[];
+let rsOpen=false,locState='initial';
+let bs=[{id:1,on:false,ing:false,bad:false,t:null},{id:2,on:false,ing:false,bad:false,t:null}];
+const allOn=()=>bs[0].on&&bs[1].on;
+
+/* ── AUTH ── */
+function doLogin(e){
+  e.preventDefault();
+  if($('u').value.trim()==='spupbeuadmin'&&$('p').value==='admin123123beu'){
+    $('lerr').style.display='none';$('login').classList.add('hidden');$('app').classList.remove('hidden');
+    if(!map)initMap();else setTimeout(()=>map.invalidateSize(),50);
+    renderRS();
+  } else $('lerr').style.display='block';
+  return false;
+}
+function logout(){$('app').classList.add('hidden');$('login').classList.remove('hidden');$('p').value='';}
+
+/* ── MAP (locked to SPUP campus) ── */
+function initMap(){
+  const sw=p2ll(-120,740),ne=p2ll(1080,-120);
+  map=L.map('map',{center:CENTER,zoom:18,minZoom:17,maxZoom:20,maxBounds:[sw,ne],maxBoundsViscosity:1,zoomSnap:0.5});
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:19,maxZoom:20,attribution:'Imagery © Esri, Maxar, Earthstar Geographics'}).addTo(map);
+  beaconLayer=L.layerGroup().addTo(map);
+  AREAS.forEach(a=>{
+    const m=L.marker(p2ll(a.x,a.y),{icon:L.divIcon({className:'',iconSize:[0,0],html:`<div class="pin" id="pin-${a.id}"><span class="dot"></span><span class="lbl">${esc(a.name)}</span></div>`})}).addTo(map);
+    m.on('click',()=>selectArea(a));
+  });
+  setTimeout(()=>map.invalidateSize(),50);
+}
+const areaLL=a=>p2ll(a.x,a.y);
+function beaconLLs(a){
+  const c=areaLL(a);
+  if(a.id==='HYFLEX')return [off(c,-9,0),off(c,9,0)];
+  return Array.from({length:a.n},(_,i)=>{const t=i/a.n*Math.PI*2;return off(c,Math.cos(t)*16,Math.sin(t)*16);});
+}
+function selectArea(a){
+  selected=a;
+  document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));
+  $('pin-'+a.id).classList.add('sel');
+  map.flyTo(areaLL(a),19.5,{duration:.8});
+  drawBeacons();renderInfo();
+}
+function drawBeacons(){
+  beaconLayer.clearLayers();
+  if(!selected)return;
+  beaconLLs(selected).forEach((ll,i)=>{
+    const on=selected.id==='HYFLEX'&&bs[i].on,col=on?'#1f7a45':'#8a9e90';
+    L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).addTo(beaconLayer).bindTooltip('BCN-'+(i+1),{permanent:true,direction:'top',offset:[0,-6]});
+    L.circle(ll,{radius:6,color:col,weight:1,fillOpacity:.12}).addTo(beaconLayer);
+  });
+}
+function renderInfo(){
+  const a=selected,box=$('info');
+  if(!a){box.classList.add('hidden');return;}
+  box.classList.remove('hidden');
+  let rows='';
+  for(let i=0;i<a.n;i++){
+    const on=a.id==='HYFLEX'&&bs[i].on;
+    rows+=`<div><span>Beacon ${i+1}</span><span style="color:${on?'var(--g2)':'var(--mu)'}">${on?'Online':'Offline'}</span></div>`;
+  }
+  const found=a.id==='HYFLEX'&&scanDone&&hyRes?`<div class="m" style="color:var(--red);font-weight:600;margin-top:.5rem">Lost item detected near BCN-${hyRes.beacon} [${hyRes.pos.toUpperCase()}]</div>`:'';
+  box.innerHTML=`<button class="x" onclick="closeInfo()">✕</button><h3>${esc(a.name)}</h3><div class="cnt">${a.n} beacons</div><div class="m">Installed in this area</div>${found}<div class="bl">${rows}</div>`;
+}
+function closeInfo(){selected=null;beaconLayer.clearLayers();renderInfo();document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));}
+function placeItem(){
+  if(itemMarker){map.removeLayer(itemMarker);itemMarker=null;}
+  const hy=AREAS.find(a=>a.id==='HYFLEX');
+  $('pin-HYFLEX')&&$('pin-HYFLEX').classList.toggle('det',!!(scanDone&&hyRes));
+  if(!(scanDone&&hyRes))return;
+  const b=beaconLLs(hy)[hyRes.beacon-1],D=10,k=.72,p=hyRes.pos;
+  const v={u:[0,D],d:[0,-D],l:[-D,0],r:[D,0],ul:[-D*k,D*k],ur:[D*k,D*k],ll:[-D*k,-D*k],lr:[D*k,-D*k]}[p];
+  itemMarker=L.marker(off(b,v[0],v[1]),{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[0,0],html:`<div class="item"><i></i><b>LOST ITEM · BCN-${hyRes.beacon} [${p.toUpperCase()}]</b></div>`})}).addTo(map);
+}
+function focusItem(){setPanel('map',document.querySelector('[data-p=map]'));if(itemMarker)map.flyTo(itemMarker.getLatLng(),20,{duration:.8});}
+
+/* ── NAV ── */
+const TITLES={map:'Campus Proximity Grid',logs:'Detection Logs',status:'Item Status Tracker',reg:'Student Registration',cil:'Common Lost Items'};
+function setPanel(n,el){
+  document.querySelectorAll('.ni').forEach(x=>x.classList.remove('on'));if(el)el.classList.add('on');
+  Object.keys(TITLES).forEach(v=>$('v-'+v).classList.toggle('hidden',v!==n));
+  $('ptitle').textContent=TITLES[n];
+  if(n==='map'&&map)setTimeout(()=>map.invalidateSize(),30);
+  if(n==='logs')renderLogs();if(n==='status')renderStatus();if(n==='reg')renderReg();if(n==='cil')renderCIL();
+}
+
+/* ── BEACON CONTROL ── */
+function toggleRS(){rsOpen=!rsOpen;$('rs').classList.toggle('open',rsOpen);setTimeout(()=>map&&map.invalidateSize(),300);if(rsOpen)renderRS();}
+function renderRS(){
+  const b=$('rsi');let h='<h3>Beacon control<button class="x2" style="color:var(--mu)" onclick="toggleRS()">✕</button></h3>';
+  if(locState==='initial')h+='<div class="c">No beacons located yet.</div><button class="btn" style="width:100%" onclick="locate()">Locate beacons</button>';
+  else if(locState==='locating')h+='<div class="sp"></div><div class="c">Scanning for beacons…</div>';
+  else{
+    h+='<div class="c" style="padding:0 0 .6rem;text-align:left;font-weight:600;color:var(--g)">HYFLEX Room · SJ 1st Floor</div>';
+    bs.forEach((x,i)=>{
+      const st=x.on?'Connected':x.ing?'Connecting…':'Not connected';
+      h+=`<div class="bi ${x.on?'on':x.ing?'ing':x.bad?'bad':''}"><div><b>Beacon ${x.id}</b><small>${st}</small>${x.bad?'<small style="color:var(--red)">Try again, beacon not connected.</small>':''}</div>${x.on?'<button disabled>On</button>':x.ing?'<button disabled>…</button>':`<button onclick="connect(${i})">Connect</button>`}</div>`;
+    });
+    if(allOn())h+='<div class="badge" style="display:block;text-align:center;padding:.6rem">All beacons online · detection ready</div>';
+  }
+  b.innerHTML=h;
+}
+function updDetect(){const b=$('dbtn');b.disabled=!allOn();b.title=allOn()?'':'Connect all beacons first';}
+function locate(){locState='locating';renderRS();setTimeout(()=>{locState='located';renderRS();},(1+Math.random()*14)*1000);}
+function connect(i){
+  const x=bs[i];if(x.on||x.ing)return;x.ing=true;x.bad=false;renderRS();
+  x.t=setTimeout(()=>{x.ing=false;x.on=true;renderRS();updDetect();if(selected&&selected.id==='HYFLEX'){drawBeacons();renderInfo();}},(1+Math.random()*14)*1000);
+}
+function failToggle(i){const x=bs[i];clearTimeout(x.t);x.ing=false;x.bad=true;renderRS();setTimeout(()=>{x.bad=false;renderRS();},3000);}
+
+/* ── DETECT FLOW ── */
+let hidBuf='',hidOn=false;
+const VALID=['u','d','l','r','ul','ur','ll','lr'];
+function startDetect(){if(!allOn())return;$('sid').value='';$('sid-err').style.display='none';$('idm').classList.add('show');setTimeout(()=>$('sid').focus(),100);}
+function cancelDetect(){$('idm').classList.remove('show');}
+$('sid').addEventListener('keydown',e=>{if(e.key==='Enter')confirmId();});
+function confirmId(){
+  const v=$('sid').value.trim();if(!v){$('sid').focus();return;}
+  if(!regIDs.includes(v.toLowerCase())){addLog(v,'deny',null);$('sid-err').style.display='block';return;}
+  $('sid-err').style.display='none';curSid=v;$('idm').classList.remove('show');hidBuf='';hidOn=true;
+}
+document.addEventListener('keydown',e=>{
+  const ti=bs.findIndex(b=>b.ing);
+  if(ti!==-1&&(e.key==='z'||e.key==='Z')){failToggle(ti);e.preventDefault();return;}
+  if(!hidOn||['Shift','Control','Alt','Meta'].includes(e.key))return;
+  if(e.key==='Enter'){
+    const raw=hidBuf.trim().toLowerCase(),bc=raw[0],pc=raw.slice(1);hidOn=false;hidBuf='';
+    if(['1','2'].includes(bc)&&VALID.includes(pc)){hyRes={beacon:+bc,pos:pc};runScan(true);}else runScan(false);
+    return;
+  }
+  if(e.key==='Backspace'){hidBuf=hidBuf.slice(0,-1);return;}
+  if(e.key.length===1){hidBuf+=e.key;if(hidBuf.length>4)hidBuf=hidBuf.slice(-4);}
+});
+function runScan(found){
+  const btn=$('dbtn');btn.disabled=true;$('scan').classList.add('show');
+  const ctx=$('rc').getContext('2d'),C=150,R=120;let ang=0,cd=Math.random()<.5?10:20;
+  $('timer').textContent=cd;
+  cdInt=setInterval(()=>{cd--;$('timer').textContent=Math.max(0,cd);if(cd<=0)clearInterval(cdInt);},1000);
+  (function draw(){
+    ctx.clearRect(0,0,300,300);ctx.fillStyle='#0d3b20';ctx.beginPath();ctx.arc(C,C,R,0,7);ctx.fill();
+    for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(C,C,R*i/4,0,7);ctx.strokeStyle='rgba(246,237,200,.3)';ctx.stroke();}
+    for(let i=0;i<50;i++){ctx.beginPath();ctx.moveTo(C,C);ctx.arc(C,C,R,ang-i*.02-.02,ang-i*.02);ctx.closePath();ctx.fillStyle=`rgba(201,162,39,${(50-i)/50*.35})`;ctx.fill();}
+    ctx.beginPath();ctx.moveTo(C,C);ctx.lineTo(C+Math.cos(ang)*R,C+Math.sin(ang)*R);ctx.strokeStyle='#e6c75a';ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+    ang+=.04;raf=requestAnimationFrame(draw);
+  })();
+  setTimeout(()=>{
+    cancelAnimationFrame(raf);$('scan').classList.remove('show');scanDone=true;
+    if(found&&hyRes){
+      const loc=`HYFLEX · SJ 1F · BCN-${hyRes.beacon} [${hyRes.pos.toUpperCase()}]`;
+      addLog(curSid,'found',loc);stats.unshift({id:curSid,loc,time:new Date(),claimed:false});
+      placeItem();renderInfo();
+      const hy=AREAS.find(a=>a.id==='HYFLEX');selectArea(hy);setTimeout(()=>itemMarker&&map.flyTo(itemMarker.getLatLng(),20,{duration:.8}),900);
+    } else {addLog(curSid,'nf',null);}
+    btn.textContent='Scanned';updDetect();
+    setTimeout(()=>{btn.textContent='Detect';updDetect();},3000);
+  },cd*1000+1000);
+}
+
+/* ── LOGS / STATUS ── */
+const fmt=d=>d.toLocaleTimeString('en-PH')+' · '+d.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+function addLog(id,r,loc){logs.unshift({id,r,loc,time:new Date()});}
+function renderLogs(){
+  $('v-logs').innerHTML=logs.length?logs.map(l=>`<div class="ent"><div><b>${esc(l.id.toUpperCase())}</b><small>${fmt(l.time)}</small>${l.loc?`<small>${esc(l.loc)}</small>`:''}<span class="tag ${l.r==='found'?'found':l.r==='nf'?'nf':'deny'}">${l.r==='found'?'Item detected':l.r==='nf'?'Not found':'Access denied'}</span></div></div>`).join(''):'<div class="c">No logs yet.</div>';
+}
+function renderStatus(){
+  $('v-status').innerHTML=stats.length?stats.map((s,i)=>`<div class="ent"><div><b>${esc(s.id.toUpperCase())}</b><small>${esc(s.loc)}</small><small>${fmt(s.time)}</small><button class="sm" onclick="focusItem()">View on map</button><button class="sm ${s.claimed?'done':''}" onclick="claim(${i})">${s.claimed?'Claimed':'Mark as claimed'}</button></div></div>`).join(''):'<div class="c">No detected items yet.</div>';
+}
+function claim(i){stats[i].claimed=true;renderStatus();}
+
+/* ── REGISTRATION / COMMON LOST ── */
+function renderReg(){
+  $('reg-list').innerHTML=regIDs.length?regIDs.map((r,i)=>`<div class="ent"><b>${esc(r.toUpperCase())}</b><button class="x2" onclick="regIDs.splice(${i},1);renderReg()">✕</button></div>`).join(''):'<div class="c">No registered IDs.</div>';
+}
+function addReg(){
+  const v=$('reg-in').value.trim().toLowerCase(),e=$('reg-err');
+  if(!v){e.style.display='block';e.textContent='Enter a student ID.';return;}
+  if(regIDs.includes(v)){e.style.display='block';e.textContent='This ID is already registered.';return;}
+  e.style.display='none';regIDs.push(v);$('reg-in').value='';renderReg();
+}
+$('reg-in').addEventListener('keydown',e=>{if(e.key==='Enter')addReg();});
+function renderCIL(){
+  $('cil-list').innerHTML=cil.length?cil.map((c,i)=>`<div class="ent"><div><b>${esc(c.sid.toUpperCase())}</b><small>${esc(c.item)}</small><small>${c.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</small></div><button class="x2" onclick="cil.splice(${i},1);renderCIL()">✕</button></div>`).join(''):'<div class="c">No entries yet.</div>';
+}
+function addCIL(){
+  const s=$('cil-id').value.trim(),it=$('cil-item').value.trim();
+  if(!s||!it){$('cil-err').style.display='block';return;}
+  $('cil-err').style.display='none';cil.unshift({sid:s,item:it,date:new Date()});$('cil-id').value='';$('cil-item').value='';renderCIL();
+}
+$('cil-item').addEventListener('keydown',e=>{if(e.key==='Enter')addCIL();});
+</script>
+</body>
+</html>
