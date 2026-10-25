@@ -68,6 +68,9 @@ input:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122,69,.15)}
 .legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 5px 0 0}
 .legend div{margin:2px 0}
 .hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;background:var(--g);color:#fff;font-size:.8rem;padding:.35rem .9rem;border-bottom:2px solid var(--gold)}
+.item i{animation:pl 1.6s infinite,bk 1s step-end infinite}@keyframes bk{50%{opacity:.2}}
+.dist{background:#f6d13b!important;color:#1b2a20!important;border:0!important;font-weight:700;font-size:.78rem}
+.dist:before{display:none}
 /* right panel */
 .rs{width:0;overflow:hidden;background:#fff;border-left:1px solid var(--line);transition:width .25s;flex-shrink:0}
 .rs.open{width:270px}
@@ -129,7 +132,7 @@ input:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122,69,.15)}
       <div class="tr">
         <span class="badge">Online</span>
         <button class="btn ghost" onclick="toggleRS()">Beacons</button>
-        <button class="btn" id="dbtn" onclick="startDetect()" disabled title="Connect all beacons first">Detect</button>
+        <button class="btn" id="dbtn" onclick="startDetect()" disabled title="Connect beacons first">Detect</button>
       </div>
     </div>
     <div class="body">
@@ -142,6 +145,7 @@ input:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122,69,.15)}
           <div><span style="background:#8a9e90"></span>Beacon offline</div>
           <div><span style="background:#1f7a45"></span>Beacon online</div>
           <div><span style="background:#b3261e"></span>Detected item</div>
+          <div><span style="background:#f6d13b"></span>Estimated distance</div>
         </div>
       </div>
       <div class="view hidden" id="v-logs"></div>
@@ -195,12 +199,30 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const $=id=>document.getElementById(id);
 
 /* ── STATE ── */
-let map,beaconLayer,itemMarker,selected=null,pins={};
-let hyRes=null,scanDone=false,curSid='',raf=null,cdInt=null;
+let map,beaconLayer,lineLayer,itemMarker,selected=null,BEACONS=[];
+let scanDone=false,itemInfo=null,curSid='',raf=null,cdInt=null;
 let regIDs=['g2010-0100065','g2018-02453'],logs=[],stats=[],cil=[];
-let rsOpen=false,locState='initial';
-let bs=[{id:1,on:false,ing:false,bad:false,t:null},{id:2,on:false,ing:false,bad:false,t:null}];
-const allOn=()=>bs[0].on&&bs[1].on;
+let rsOpen=false,locState='initial',connecting=false,connTimer=null,connMsg='';
+const onlineBs=()=>BEACONS.filter(b=>b.on);
+const dm=(a,b)=>Math.hypot((a[0]-b[0])*M_LAT,(a[1]-b[1])*M_LNG);
+const areaLL=a=>p2ll(a.x,a.y);
+
+/* Random beacon count (1–5) per area. Beacons sit near their own area,
+   never on top of each other and never closer to another area's centre. */
+function genBeacons(){
+  BEACONS=[];
+  const cs=AREAS.map(areaLL);
+  AREAS.forEach((a,ai)=>{
+    a.n=1+Math.floor(Math.random()*5);a.bs=[];
+    for(let k=0;k<a.n;k++){
+      for(let t=0;t<300;t++){
+        const r=10+Math.random()*12,th=Math.random()*Math.PI*2,ll=off(cs[ai],Math.cos(th)*r,Math.sin(th)*r);
+        const ok=BEACONS.every(b=>dm(b.ll,ll)>=8)&&cs.every((c,ci)=>ci===ai||dm(c,ll)>dm(cs[ai],ll)+6);
+        if(ok||t===299){const b={id:a.id+'-'+(k+1),label:k+1,area:a,ll,on:false};BEACONS.push(b);a.bs.push(b);break;}
+      }
+    }
+  });
+}
 
 /* ── AUTH ── */
 function doLogin(e){
@@ -216,68 +238,71 @@ function logout(){$('app').classList.add('hidden');$('login').classList.remove('
 
 /* ── MAP (locked to SPUP campus) ── */
 function initMap(){
+  genBeacons();
   const sw=p2ll(-120,740),ne=p2ll(1080,-120);
   map=L.map('map',{center:CENTER,zoom:18,minZoom:17,maxZoom:20,maxBounds:[sw,ne],maxBoundsViscosity:1,zoomSnap:0.5});
-  // NATIVE = deepest zoom where the satellite provider has real imagery here.
-  // Beyond it the tiles are stretched instead of showing "map data not available". Raise it if you find sharper imagery.
+  // NATIVE = deepest zoom where the provider has real imagery here; deeper zooms are stretched.
   const NATIVE=17,att='Imagery © Esri, Maxar, Earthstar Geographics';
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:NATIVE,maxZoom:20,attribution:att});
   const clar=L.tileLayer('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:NATIVE,maxZoom:20,attribution:att});
   const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxNativeZoom:19,maxZoom:20,attribution:'© OpenStreetMap contributors'});
   sat.addTo(map);
   L.control.layers({'Satellite (Esri)':sat,'Satellite (Esri Clarity)':clar,'Street map (OSM)':osm}).addTo(map);
+  lineLayer=L.layerGroup().addTo(map);
   beaconLayer=L.layerGroup().addTo(map);
   AREAS.forEach(a=>{
-    const m=L.marker(p2ll(a.x,a.y),{icon:L.divIcon({className:'',iconSize:[0,0],html:`<div class="pin" id="pin-${a.id}"><span class="dot"></span><span class="lbl">${esc(a.name)}</span></div>`})}).addTo(map);
+    const m=L.marker(areaLL(a),{icon:L.divIcon({className:'',iconSize:[0,0],html:`<div class="pin" id="pin-${a.id}"><span class="dot"></span><span class="lbl">${esc(a.name)}</span></div>`})}).addTo(map);
     m.on('click',()=>selectArea(a));
   });
+  drawBeacons();
   setTimeout(()=>map.invalidateSize(),50);
 }
-const areaLL=a=>p2ll(a.x,a.y);
-function beaconLLs(a){
-  const c=areaLL(a);
-  if(a.id==='HYFLEX')return [off(c,-9,0),off(c,9,0)];
-  return Array.from({length:a.n},(_,i)=>{const t=i/a.n*Math.PI*2;return off(c,Math.cos(t)*30,Math.sin(t)*30);});
-}
-function selectArea(a){
+function selectArea(a,noPan){
   selected=a;
   document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));
   $('pin-'+a.id).classList.add('sel');
-  map.panTo(areaLL(a),{duration:.6});
+  if(!noPan)map.panTo(areaLL(a),{duration:.6});
   drawBeacons();renderInfo();
 }
 function drawBeacons(){
   beaconLayer.clearLayers();
-  if(!selected)return;
-  beaconLLs(selected).forEach((ll,i)=>{
-    const on=selected.id==='HYFLEX'&&bs[i].on,col=on?'#1f7a45':'#8a9e90';
-    L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).addTo(beaconLayer).bindTooltip('BCN-'+(i+1),{permanent:true,direction:'top',offset:[0,-6]});
-    L.circle(ll,{radius:6,color:col,weight:1,fillOpacity:.12}).addTo(beaconLayer);
+  BEACONS.forEach(b=>{
+    const col=b.on?'#1f7a45':'#8a9e90';
+    if(b.on)L.circle(b.ll,{radius:8,color:col,weight:1,fillOpacity:.18,interactive:false}).addTo(beaconLayer);
+    const m=L.circleMarker(b.ll,{radius:b.on?7:5,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).addTo(beaconLayer);
+    if(selected&&b.area===selected)m.bindTooltip('BCN '+b.id,{permanent:true,direction:'top',offset:[0,-6]});
   });
 }
 function renderInfo(){
   const a=selected,box=$('info');
   if(!a){box.classList.add('hidden');return;}
   box.classList.remove('hidden');
-  let rows='';
-  for(let i=0;i<a.n;i++){
-    const on=a.id==='HYFLEX'&&bs[i].on;
-    rows+=`<div><span>Beacon ${i+1}</span><span style="color:${on?'var(--g2)':'var(--mu)'}">${on?'Online':'Offline'}</span></div>`;
-  }
-  const found=a.id==='HYFLEX'&&scanDone&&hyRes?`<div class="m" style="color:var(--red);font-weight:600;margin-top:.5rem">Lost item detected near BCN-${hyRes.beacon} [${hyRes.pos.toUpperCase()}]</div>`:'';
-  box.innerHTML=`<button class="x" onclick="closeInfo()">✕</button><h3>${esc(a.name)}</h3><div class="cnt">${a.n} beacons</div><div class="m">Installed in this area</div>${found}<div class="bl">${rows}</div>`;
+  const rows=a.bs.map(b=>`<div><span>Beacon ${b.label}</span><span style="color:${b.on?'var(--g2)':'var(--mu)'}">${b.on?'Online':'Offline'}</span></div>`).join('');
+  const it=itemInfo&&itemInfo.area===a?`<div class="m" style="color:var(--red);font-weight:600;margin-top:.5rem">Lost item detected · ≈${itemInfo.dist} m from BCN ${itemInfo.beacon.id}</div>`:'';
+  box.innerHTML=`<button class="x" onclick="closeInfo()">✕</button><h3>${esc(a.name)}</h3><div class="cnt">${a.n} beacon${a.n>1?'s':''}</div><div class="m">${a.bs.filter(b=>b.on).length} online</div>${it}<div class="bl">${rows}</div>`;
 }
-function closeInfo(){selected=null;beaconLayer.clearLayers();renderInfo();document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));}
+function closeInfo(){selected=null;drawBeacons();renderInfo();document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));}
+
+/* pick a random online beacon, put the item a few metres from it, then
+   measure from the closest online beacon (with a small estimation error) */
+function pickItem(){
+  const on=onlineBs(),src=on[Math.floor(Math.random()*on.length)];
+  const r=5+Math.random()*9,th=Math.random()*Math.PI*2,ll=off(src.ll,Math.cos(th)*r,Math.sin(th)*r);
+  let near=on[0];on.forEach(b=>{if(dm(b.ll,ll)<dm(near.ll,ll))near=b;});
+  const est=Math.max(1,dm(near.ll,ll)*(0.9+Math.random()*0.2));
+  return {ll,beacon:near,area:src.area,dist:Math.round(est*10)/10};
+}
 function placeItem(){
   if(itemMarker){map.removeLayer(itemMarker);itemMarker=null;}
-  const hy=AREAS.find(a=>a.id==='HYFLEX');
-  $('pin-HYFLEX')&&$('pin-HYFLEX').classList.toggle('det',!!(scanDone&&hyRes));
-  if(!(scanDone&&hyRes))return;
-  const b=beaconLLs(hy)[hyRes.beacon-1],D=10,k=.72,p=hyRes.pos;
-  const v={u:[0,D],d:[0,-D],l:[-D,0],r:[D,0],ul:[-D*k,D*k],ur:[D*k,D*k],ll:[-D*k,-D*k],lr:[D*k,-D*k]}[p];
-  itemMarker=L.marker(off(b,v[0],v[1]),{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[0,0],html:`<div class="item"><i></i><b>LOST ITEM · BCN-${hyRes.beacon} [${p.toUpperCase()}]</b></div>`})}).addTo(map);
+  lineLayer.clearLayers();
+  document.querySelectorAll('.pin').forEach(p=>p.classList.remove('det'));
+  if(!itemInfo)return;
+  const it=itemInfo;
+  $('pin-'+it.area.id).classList.add('det');
+  L.polyline([it.beacon.ll,it.ll],{color:'#f6d13b',weight:3,dashArray:'7 6'}).addTo(lineLayer).bindTooltip('≈ '+it.dist+' m',{permanent:true,direction:'center',className:'dist'});
+  itemMarker=L.marker(it.ll,{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[0,0],html:`<div class="item"><i></i><b>LOST ITEM</b></div>`})}).addTo(map);
 }
-function focusItem(){setPanel('map',document.querySelector('[data-p=map]'));if(itemMarker)map.flyTo(itemMarker.getLatLng(),19,{duration:.8});}
+function focusItem(){setPanel('map',document.querySelector('[data-p=map]'));if(itemInfo)map.flyTo(itemInfo.ll,19,{duration:.8});}
 
 /* ── NAV ── */
 const TITLES={map:'Campus Proximity Grid',logs:'Detection Logs',status:'Item Status Tracker',reg:'Student Registration',cil:'Common Lost Items'};
@@ -292,49 +317,53 @@ function setPanel(n,el){
 /* ── BEACON CONTROL ── */
 function toggleRS(){rsOpen=!rsOpen;$('rs').classList.toggle('open',rsOpen);setTimeout(()=>map&&map.invalidateSize(),300);if(rsOpen)renderRS();}
 function renderRS(){
-  const b=$('rsi');let h='<h3>Beacon control<button class="x2" style="color:var(--mu)" onclick="toggleRS()">✕</button></h3>';
+  let h='<h3>Beacon control<button class="x2" style="color:var(--mu)" onclick="toggleRS()">✕</button></h3>';
   if(locState==='initial')h+='<div class="c">No beacons located yet.</div><button class="btn" style="width:100%" onclick="locate()">Locate beacons</button>';
   else if(locState==='locating')h+='<div class="sp"></div><div class="c">Scanning for beacons…</div>';
   else{
-    h+='<div class="c" style="padding:0 0 .6rem;text-align:left;font-weight:600;color:var(--g)">HYFLEX Room · SJ 1st Floor</div>';
-    bs.forEach((x,i)=>{
-      const st=x.on?'Connected':x.ing?'Connecting…':'Not connected';
-      h+=`<div class="bi ${x.on?'on':x.ing?'ing':x.bad?'bad':''}"><div><b>Beacon ${x.id}</b><small>${st}</small>${x.bad?'<small style="color:var(--red)">Try again, beacon not connected.</small>':''}</div>${x.on?'<button disabled>On</button>':x.ing?'<button disabled>…</button>':`<button onclick="connect(${i})">Connect</button>`}</div>`;
-    });
-    if(allOn())h+='<div class="badge" style="display:block;text-align:center;padding:.6rem">All beacons online · detection ready</div>';
+    const on=onlineBs().length;
+    h+=`<div class="c" style="padding:0 0 .6rem;text-align:left;font-weight:600;color:var(--g)">${BEACONS.length} beacons across ${AREAS.length} areas</div>`;
+    if(connecting)h+='<div class="sp"></div><div class="c">Connecting to beacons…<br>Press Z to cancel</div>';
+    else{
+      h+=`<button class="btn" style="width:100%;margin-bottom:.6rem" onclick="connectAll()">${on?'Reconnect beacons':'Connect beacons'}</button>`;
+      if(connMsg)h+=`<div class="badge" style="display:block;text-align:center;padding:.5rem;margin-bottom:.6rem">${connMsg}</div>`;
+      AREAS.forEach(a=>{const c=a.bs.filter(b=>b.on).length;h+=`<div class="bi ${c?'on':''}"><div><b>${esc(a.name)}</b><small>${c} of ${a.n} online</small></div></div>`;});
+    }
   }
-  b.innerHTML=h;
+  $('rsi').innerHTML=h;
 }
-function updDetect(){const b=$('dbtn');b.disabled=!allOn();b.title=allOn()?'':'Connect all beacons first';}
+function updDetect(){const b=$('dbtn'),ok=onlineBs().length>0;b.disabled=!ok;b.title=ok?'':'Connect beacons first';}
 function locate(){locState='locating';renderRS();setTimeout(()=>{locState='located';renderRS();},(1+Math.random()*14)*1000);}
-function connect(i){
-  const x=bs[i];if(x.on||x.ing)return;x.ing=true;x.bad=false;renderRS();
-  x.t=setTimeout(()=>{x.ing=false;x.on=true;renderRS();updDetect();if(selected&&selected.id==='HYFLEX'){drawBeacons();renderInfo();}},(1+Math.random()*14)*1000);
+/* every connect attempt brings a different random set of beacons online */
+function connectAll(){
+  if(connecting)return;
+  connecting=true;connMsg='';BEACONS.forEach(b=>b.on=false);
+  drawBeacons();renderRS();updDetect();renderInfo();
+  connTimer=setTimeout(()=>{
+    const pool=BEACONS.slice().sort(()=>Math.random()-.5),k=1+Math.floor(Math.random()*BEACONS.length);
+    pool.slice(0,k).forEach(b=>b.on=true);
+    connecting=false;connMsg=`${k} of ${BEACONS.length} beacons online`;
+    drawBeacons();renderRS();updDetect();renderInfo();
+  },(1+Math.random()*9)*1000);
 }
-function failToggle(i){const x=bs[i];clearTimeout(x.t);x.ing=false;x.bad=true;renderRS();setTimeout(()=>{x.bad=false;renderRS();},3000);}
+function cancelConnect(){clearTimeout(connTimer);connecting=false;connMsg='Connection failed. Try again.';renderRS();updDetect();}
 
 /* ── DETECT FLOW ── */
-let hidBuf='',hidOn=false;
-const VALID=['u','d','l','r','ul','ur','ll','lr'];
-function startDetect(){if(!allOn())return;$('sid').value='';$('sid-err').style.display='none';$('idm').classList.add('show');setTimeout(()=>$('sid').focus(),100);}
+let hidOn=false;
+function startDetect(){if(!onlineBs().length)return;$('sid').value='';$('sid-err').style.display='none';$('idm').classList.add('show');setTimeout(()=>$('sid').focus(),100);}
 function cancelDetect(){$('idm').classList.remove('show');}
 $('sid').addEventListener('keydown',e=>{if(e.key==='Enter')confirmId();});
 function confirmId(){
   const v=$('sid').value.trim();if(!v){$('sid').focus();return;}
   if(!regIDs.includes(v.toLowerCase())){addLog(v,'deny',null);$('sid-err').style.display='block';return;}
-  $('sid-err').style.display='none';curSid=v;$('idm').classList.remove('show');hidBuf='';hidOn=true;
+  $('sid-err').style.display='none';curSid=v;$('idm').classList.remove('show');$('sid').blur();hidOn=true;
 }
+/* after the ID is accepted: M = item found, Enter = nothing found */
 document.addEventListener('keydown',e=>{
-  const ti=bs.findIndex(b=>b.ing);
-  if(ti!==-1&&(e.key==='z'||e.key==='Z')){failToggle(ti);e.preventDefault();return;}
-  if(!hidOn||['Shift','Control','Alt','Meta'].includes(e.key))return;
-  if(e.key==='Enter'){
-    const raw=hidBuf.trim().toLowerCase(),bc=raw[0],pc=raw.slice(1);hidOn=false;hidBuf='';
-    if(['1','2'].includes(bc)&&VALID.includes(pc)){hyRes={beacon:+bc,pos:pc};runScan(true);}else runScan(false);
-    return;
-  }
-  if(e.key==='Backspace'){hidBuf=hidBuf.slice(0,-1);return;}
-  if(e.key.length===1){hidBuf+=e.key;if(hidBuf.length>4)hidBuf=hidBuf.slice(-4);}
+  if(connecting&&(e.key==='z'||e.key==='Z')){cancelConnect();e.preventDefault();return;}
+  if(!hidOn)return;
+  if(e.key==='m'||e.key==='M'){hidOn=false;runScan(true);}
+  else if(e.key==='Enter'){hidOn=false;runScan(false);}
 });
 function runScan(found){
   const btn=$('dbtn');btn.disabled=true;$('scan').classList.add('show');
@@ -350,12 +379,14 @@ function runScan(found){
   })();
   setTimeout(()=>{
     cancelAnimationFrame(raf);$('scan').classList.remove('show');scanDone=true;
-    if(found&&hyRes){
-      const loc=`HYFLEX · SJ 1F · BCN-${hyRes.beacon} [${hyRes.pos.toUpperCase()}]`;
+    if(found&&onlineBs().length){
+      itemInfo=pickItem();const it=itemInfo;
+      const loc=`${it.area.name} · ≈${it.dist} m from BCN ${it.beacon.id}`;
       addLog(curSid,'found',loc);stats.unshift({id:curSid,loc,time:new Date(),claimed:false});
-      placeItem();renderInfo();
-      const hy=AREAS.find(a=>a.id==='HYFLEX');selectArea(hy);setTimeout(()=>itemMarker&&map.flyTo(itemMarker.getLatLng(),19,{duration:.8}),900);
-    } else {addLog(curSid,'nf',null);}
+      setPanel('map',document.querySelector('[data-p=map]'));
+      placeItem();selectArea(it.area,true);
+      setTimeout(()=>map.flyTo(it.ll,19,{duration:1}),150);
+    } else addLog(curSid,'nf',null);
     btn.textContent='Scanned';updDetect();
     setTimeout(()=>{btn.textContent='Detect';updDetect();},3000);
   },cd*1000+1000);
