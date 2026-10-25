@@ -386,7 +386,7 @@ function runScan(found){
     if(found&&onlineBs().length){
       itemInfo=pickItem();const it=itemInfo;
       const loc=`${it.area.name} · ≈${it.dist} m from BCN ${it.beacon.id}`;
-      addLog(curSid,'found',loc);stats.unshift({id:curSid,loc,time:new Date(),claimed:false});
+      addLog(curSid,'found',loc);stats.unshift({id:curSid,loc,time:new Date(),claimed:false,item:it});
       setPanel('map',document.querySelector('[data-p=map]'));
       placeItem();selectArea(it.area,true);
       setTimeout(()=>map.flyTo(it.ll,19,{duration:1}),150);
@@ -403,9 +403,12 @@ function renderLogs(){
   $('v-logs').innerHTML=logs.length?logs.map(l=>`<div class="ent"><div><b>${esc(l.id.toUpperCase())}</b><small>${fmt(l.time)}</small>${l.loc?`<small>${esc(l.loc)}</small>`:''}<span class="tag ${l.r==='found'?'found':l.r==='nf'?'nf':'deny'}">${l.r==='found'?'Item detected':l.r==='nf'?'Not found':'Access denied'}</span></div></div>`).join(''):'<div class="c">No logs yet.</div>';
 }
 function renderStatus(){
-  $('v-status').innerHTML=stats.length?stats.map((s,i)=>`<div class="ent"><div><b>${esc(s.id.toUpperCase())}</b><small>${esc(s.loc)}</small><small>${fmt(s.time)}</small><button class="sm" onclick="focusItem()">View on map</button><button class="sm ${s.claimed?'done':''}" onclick="claim(${i})">${s.claimed?'Claimed':'Mark as claimed'}</button></div></div>`).join(''):'<div class="c">No detected items yet.</div>';
+  $('v-status').innerHTML=stats.length?stats.map((s,i)=>`<div class="ent"><div><b>${esc(s.id.toUpperCase())}</b><small>${esc(s.loc)}</small><small>${fmt(s.time)}</small>${s.claimed?'':'<button class="sm" onclick="focusItem()">View on map</button>'}<button class="sm ${s.claimed?'done':''}" onclick="claim(${i})">${s.claimed?'Claimed':'Mark as claimed'}</button></div></div>`).join(''):'<div class="c">No detected items yet.</div>';
 }
-function claim(i){stats[i].claimed=true;renderStatus();}
+function claim(i){
+  stats[i].claimed=true;renderStatus();
+  if(itemInfo&&stats[i].item===itemInfo){itemInfo=null;placeItem();drawBeacons();renderInfo();}
+}
 
 /* ── REGISTRATION / COMMON LOST ── */
 function renderReg(){
