@@ -266,11 +266,15 @@ function selectArea(a,noPan){
 }
 function drawBeacons(){
   beaconLayer.clearLayers();
+  // Beacons are hidden until their area is selected; the beacon that detected the item is always shown.
   BEACONS.forEach(b=>{
+    const inArea=selected&&b.area===selected,detector=itemInfo&&itemInfo.beacon===b;
+    if(!inArea&&!detector)return;
     const col=b.on?'#1f7a45':'#8a9e90';
     if(b.on)L.circle(b.ll,{radius:8,color:col,weight:1,fillOpacity:.18,interactive:false}).addTo(beaconLayer);
-    const m=L.circleMarker(b.ll,{radius:b.on?7:5,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).addTo(beaconLayer);
-    if(selected&&b.area===selected)m.bindTooltip('BCN '+b.id,{permanent:true,direction:'top',offset:[0,-6]});
+    if(detector)L.circleMarker(b.ll,{radius:13,color:'#f6d13b',weight:3,fillOpacity:0,interactive:false}).addTo(beaconLayer);
+    const m=L.circleMarker(b.ll,{radius:detector?8:b.on?7:5,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).addTo(beaconLayer);
+    m.bindTooltip(detector?'BCN '+b.id+' · detected item':'BCN '+b.id,{permanent:true,direction:'top',offset:[0,-8]});
   });
 }
 function renderInfo(){
