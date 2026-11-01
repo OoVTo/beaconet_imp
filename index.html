@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <style>
 :root{--g:#14532d;--g2:#1f7a45;--gl:#e8f3ec;--gold:#c9a227;--gold2:#f6edc8;--bg:#fbfaf5;--card:#fff;--line:#e3dfca;--tx:#1b2a20;--mu:#6d7c71;--red:#b3261e;--warn:#9a6b00;
@@ -114,10 +114,10 @@ input:focus,select:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122
 .card h3{font-family:var(--serif);color:var(--g);font-size:1rem;margin-bottom:.9rem}
 .card p.n{font-size:.82rem;color:var(--mu);line-height:1.4;margin-bottom:1rem}
 #qprev{display:flex;flex-direction:column;align-items:center;margin-top:1rem;text-align:center}
-#qprev img{width:100%;max-width:260px;height:auto;border:1px solid var(--line)}
+#qprev img{width:100%;max-width:260px;height:auto;border:1px solid var(--line);image-rendering:pixelated}
 .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.8rem}
 .qc{background:#fff;border:1px solid var(--line);border-top:4px solid var(--gold);padding:.8rem;text-align:center}
-.qc img{width:100%;max-width:180px;height:auto}
+.qc img{width:100%;max-width:180px;height:auto;image-rendering:pixelated}
 .qc b{display:block;color:var(--g);margin-top:.4rem;word-break:break-word}
 .qc small{color:var(--mu);font-size:.72rem;display:block;margin-top:2px}
 .qc .row{display:flex;gap:.3rem;justify-content:center;margin-top:.5rem;flex-wrap:wrap}
@@ -239,6 +239,8 @@ input:focus,select:focus{border-color:var(--g2);box-shadow:0 0 0 3px rgba(31,122
         <div class="vwrap"><video id="vid" playsinline muted></video></div>
         <canvas id="vc" class="hidden"></canvas>
         <div class="srow"><button class="btn" id="sc-start" onclick="startScan()">Start camera</button><button class="btn ghost hidden" id="sc-stop" onclick="stopScan()">Stop</button></div>
+        <div class="c" id="s-st" style="padding:.6rem 0 0"></div>
+        <div class="srow" style="margin-top:.6rem"><label class="btn ghost" style="text-align:center;margin:0;cursor:pointer;color:var(--g)">Scan from a photo<input type="file" accept="image/*" hidden onchange="scanFile(this)"/></label></div>
         <div id="s-res"></div>
       </div>
     </div>
@@ -569,13 +571,8 @@ function genQR(){
   if(!name){e.style.display='block';e.textContent='Enter the item name.';return;}
   e.style.display='none';
   let token;do{token=Date.now().toString(36)+Math.random().toString(36).slice(2,8);}while(Object.values(QRS).some(l=>l.some(q=>q.id===token)));
-  const payload='BEACONET|'+stuUser+'|'+token;
-  const tmp=document.createElement('div');
-  new QRCode(tmp,{text:payload,width:256,height:256,correctLevel:QRCode.CorrectLevel.M});
-  const src=tmp.querySelector('canvas'),pad=24,c=document.createElement('canvas');
-  c.width=c.height=src.width+pad*2;
-  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(src,pad,pad);
-  const img=c.toDataURL('image/png');
+  const payload='BEACONET|'+stuUser+'|'+token+'|'+name.replace(/\|/g,'/');
+  const img=makeImg(payload);
   myQRs().unshift({id:token,item:name,payload,img,date:Date.now()});
   saveAll();
   $('qprev').innerHTML=`<img src="${img}" alt="QR code"/><p style="margin-top:.6rem"><b style="color:var(--g)">${esc(name)}</b><br><small style="color:var(--mu)">Saved to My QR Codes</small></p><button class="btn ghost" style="margin-top:.6rem" onclick="sTab('mine')">View my QR codes</button>`;
@@ -596,41 +593,71 @@ async function startScan(){
   try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});}
   catch(e){r.innerHTML='<div class="res bad"><b>Camera blocked.</b> Allow camera permission in your browser and try again.</div>';return;}
   const v=$('vid');v.srcObject=stream;await v.play().catch(()=>{});
-  scanning=true;$('sc-start').classList.add('hidden');$('sc-stop').classList.remove('hidden');tick();
+  scanning=true;$('s-st').textContent='Scanning… hold the QR code inside the gold frame';$('sc-start').classList.add('hidden');$('sc-stop').classList.remove('hidden');tick();
 }
-function tick(){
+let det=null;try{if('BarcodeDetector' in window)det=new BarcodeDetector({formats:['qr_code']});}catch(e){det=null;}
+function jsqrRead(src,w,h){
+  const sc=Math.min(1,800/w),cw=Math.round(w*sc),ch=Math.round(h*sc),c=$('vc');
+  c.width=cw;c.height=ch;const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(src,0,0,cw,ch);
+  const d=x.getImageData(0,0,cw,ch),code=jsQR(d.data,cw,ch,{inversionAttempts:'attemptBoth'});
+  return code&&code.data?code.data:null;
+}
+async function tick(){
   if(!scanning)return;
   const v=$('vid');
-  if(v.readyState===v.HAVE_ENOUGH_DATA&&v.videoWidth){
-    const sc=Math.min(1,640/v.videoWidth),w=Math.round(v.videoWidth*sc),h=Math.round(v.videoHeight*sc),c=$('vc');
-    c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});
-    x.drawImage(v,0,0,w,h);
-    const d=x.getImageData(0,0,w,h),code=jsQR(d.data,w,h,{inversionAttempts:'dontInvert'});
-    if(code&&code.data){handleScan(code.data);return;}
+  if(v.readyState>=2&&v.videoWidth){
+    let data=null;
+    if(det){try{const r=await det.detect(v);if(r.length)data=r[0].rawValue;}catch(e){}}
+    if(!data)data=jsqrRead(v,v.videoWidth,v.videoHeight);
+    if(!scanning)return;
+    if(data){handleScan(data);return;}
   }
   scanRaf=requestAnimationFrame(tick);
+}
+function scanFile(inp){
+  const f=inp.files&&inp.files[0];inp.value='';if(!f)return;
+  stopScan();$('s-res').innerHTML='';
+  const im=new Image();
+  im.onload=async()=>{
+    let data=null;
+    if(det){try{const r=await det.detect(im);if(r.length)data=r[0].rawValue;}catch(e){}}
+    if(!data)data=jsqrRead(im,im.naturalWidth,im.naturalHeight);
+    URL.revokeObjectURL(im.src);
+    if(data)handleScan(data);else $('s-res').innerHTML='<div class="res bad"><b>No QR code found</b> in that photo. Try a sharper, closer picture.</div>';
+  };
+  im.src=URL.createObjectURL(f);
 }
 function stopScan(){
   scanning=false;cancelAnimationFrame(scanRaf);
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
   const v=$('vid');if(v)v.srcObject=null;
-  $('sc-start').classList.remove('hidden');$('sc-stop').classList.add('hidden');
+  $('sc-start').classList.remove('hidden');$('sc-stop').classList.add('hidden');$('s-st').textContent='';
 }
 function handleScan(text){
   stopScan();
-  const r=$('s-res'),parts=text.split('|');
-  let hit=null,owner=null;
-  if(parts[0]==='BEACONET'&&parts.length===3){
-    owner=parts[1];const q=(QRS[owner]||[]).find(q=>q.id===parts[2]);if(q)hit=q;
-  }
-  if(hit){
-    const mine=owner===stuUser;
-    r.innerHTML=`<div class="res"><b>Valid BEACONET code</b><br>Item: <b>${esc(hit.item)}</b><br>Owner: <b>${esc(owner.toUpperCase())}</b>${mine?' (you)':''}<br><small>Created ${fmtD(hit.date)}</small></div>`;
+  const r=$('s-res'),parts=String(text).split('|');
+  if(parts[0]==='BEACONET'&&parts.length>=3){
+    const owner=parts[1],tok=parts[2],q=(QRS[owner]||[]).find(q=>q.id===tok);
+    const item=q?q.item:(parts[3]||'Unknown item'),mine=owner===stuUser;
+    r.innerHTML=`<div class="res"><b>BEACONET code found</b><br>Item: <b>${esc(item)}</b><br>Owner: <b>${esc(owner.toUpperCase())}</b>${mine?' (you)':''}${q?`<br><small>Registered ${fmtD(q.date)}</small>`:'<br><small>Registered on another device</small>'}</div>`;
   } else {
-    r.innerHTML=`<div class="res bad"><b>Not recognised.</b> This QR code is not registered in BEACONET.</div>`;
+    r.innerHTML=`<div class="res bad"><b>Not a BEACONET code.</b><br><small>${esc(String(text).slice(0,80))}</small></div>`;
   }
   r.innerHTML+='<button class="btn" style="width:100%;margin-top:.8rem" onclick="startScan()">Scan again</button>';
 }
+
+/* QR image: integer-sized modules + quiet zone so cameras and phone scanners read it reliably */
+function makeImg(text){
+  const qr=qrcode(0,'M');qr.addData(text);qr.make();
+  const n=qr.getModuleCount(),cell=Math.max(6,Math.floor(560/(n+8))),quiet=4*cell,size=n*cell+quiet*2;
+  const c=document.createElement('canvas');c.width=c.height=size;
+  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,size,size);x.fillStyle='#000';
+  for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(qr.isDark(r,k))x.fillRect(quiet+k*cell,quiet+r*cell,cell,cell);
+  return c.toDataURL('image/png');
+}
+/* re-draw previously saved codes with the sharper generator (same data, so they stay valid) */
+Object.values(QRS).forEach(l=>l.forEach(q=>{try{q.img=makeImg(q.payload);}catch(e){}}));saveAll();
 
 /* restore a student session after refresh */
 (function(){const s=LS.get('bn_sess','');if(s&&regIDs.includes(s)&&PW[s]){stuUser=s;openStudent();}})();
