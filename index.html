@@ -304,7 +304,7 @@ const $=id=>document.getElementById(id);
 let map,beaconLayer,lineLayer,itemMarker,selected=null,BEACONS=[];
 let scanDone=false,itemInfo=null,curSid='',raf=null,cdInt=null;
 let logs=[],stats=[],cil=[];
-let rsOpen=false,locState='initial',connecting=false,connTimer=null,connMsg='';
+let locEnabled=false,rsOpen=false,locState='initial',connecting=false,connTimer=null,connMsg='';
 const onlineBs=()=>BEACONS.filter(b=>b.on);
 const dm=(a,b)=>Math.hypot((a[0]-b[0])*M_LAT,(a[1]-b[1])*M_LNG);
 const areaLL=a=>p2ll(a.x,a.y);
@@ -431,7 +431,7 @@ function setPanel(n,el){
 function toggleRS(){rsOpen=!rsOpen;$('rs').classList.toggle('open',rsOpen);setTimeout(()=>map&&map.invalidateSize(),300);if(rsOpen)renderRS();}
 function renderRS(){
   let h='<h3>Beacon control<button class="x2" style="color:var(--mu)" onclick="toggleRS()">✕</button></h3>';
-  if(locState==='initial')h+='<div class="c">No beacons located yet.</div><button class="btn" style="width:100%" onclick="locate()">Locate beacons</button>';
+  if(locState==='initial')h+=`<div class="c">${locEnabled?'No beacons located yet.':'Locating beacons is currently deactivated.'}</div><button class="btn" style="width:100%" onclick="locate()" ${locEnabled?'':'disabled title="Deactivated"'}>Locate beacons</button>`;
   else if(locState==='locating')h+='<div class="sp"></div><div class="c">Scanning for beacons…</div>';
   else{
     const on=onlineBs().length;
@@ -446,7 +446,7 @@ function renderRS(){
   $('rsi').innerHTML=h;
 }
 function updDetect(){const b=$('dbtn'),ok=onlineBs().length>0;b.disabled=!ok;b.title=ok?'':'Connect beacons first';}
-function locate(){locState='locating';renderRS();setTimeout(()=>{locState='located';renderRS();},(1+Math.random()*14)*1000);}
+function locate(){if(!locEnabled)return;locState='locating';renderRS();setTimeout(()=>{locState='located';renderRS();},(1+Math.random()*14)*1000);}
 /* every connect attempt brings a different random set of beacons online */
 function connectAll(){
   if(connecting)return;
@@ -460,6 +460,16 @@ function connectAll(){
   },(1+Math.random()*9)*1000);
 }
 function cancelConnect(){clearTimeout(connTimer);connecting=false;connMsg='Connection failed. Try again.';renderRS();updDetect();}
+
+/* Locate beacons is deactivated; hold R + B + W together (admin only) to reactivate it */
+const heldKeys=new Set();
+document.addEventListener('keydown',e=>{
+  if(!e.key||$('app').classList.contains('hidden'))return;
+  heldKeys.add(e.key.toLowerCase());
+  if(!locEnabled&&heldKeys.has('r')&&heldKeys.has('b')&&heldKeys.has('w')){locEnabled=true;e.preventDefault();renderRS();}
+});
+document.addEventListener('keyup',e=>{if(e.key)heldKeys.delete(e.key.toLowerCase());});
+window.addEventListener('blur',()=>heldKeys.clear());
 
 /* ── DETECT FLOW ── */
 let hidOn=false;
